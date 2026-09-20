@@ -1,0 +1,177 @@
+...
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <title>Таймер тренировки</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+            overflow: hidden;
+            font-family: sans-serif;
+            color: white;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.4s;
+            background: #F44336;
+        }
+
+        #time {
+            font-size: 34vw;
+            font-weight: bold;
+            line-height: 1;
+            text-shadow: 0 4px 25px rgba(0, 0, 0, 0.35);
+        }
+
+        #label {
+            font-size: 8vw;
+            margin-top: 10px;
+            letter-spacing: 4px;
+            opacity: 0.95;
+        }
+
+        #btn {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 22px 70px;
+            font-size: 6vw;
+            border: none;
+            border-radius: 60px;
+            background: rgba(255, 255, 255, 0.28);
+            color: white;
+            font-weight: bold;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        #btn:active {
+            background: rgba(255, 255, 255, 0.55);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="time">60</div>
+    <div id="label">КРАСНЫЙ</div>
+    <button id="btn" onclick="toggle()">СТАРТ</button>
+
+    <script>
+        // === НАСТРОЙКИ ===
+        const PERIOD = 60;                        // секунд на фазу
+        const COLORS = ['#F44336', '#4CAF50'];    // 0 = красный, 1 = зелёный
+        const LABELS = ['КРАСНЫЙ', 'ЗЕЛЁНЫЙ'];
+        // ==================
+
+        let phase = 0;       // 0 = красный, 1 = зелёный
+        let timeLeft = PERIOD;
+        let running = false;
+        let endTime = 0;
+        let rafId = null;
+        let audioCtx = null;
+
+        const timeEl = document.getElementById('time');
+        const labelEl = document.getElementById('label');
+        const btn = document.getElementById('btn');
+
+        // Инициализация звука (нужна для мобильных браузеров)
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        // Звуковой сигнал — три коротких пика
+        function beep(times = 3, freq = 880) {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+            const dur = 0.15;          // длительность одного пика
+            const gap = 0.12;          // пауза между пиками
+
+            for (let i = 0; i < times; i++) {
+                const t = now + i * (dur + gap);
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, t);
+
+                // Плавное появление/затухание, чтобы не было щелчка
+                gain.gain.setValueAtTime(0, t);
+                gain.gain.linearRampToValueAtTime(0.5, t + 0.01);
+                gain.gain.linearRampToValueAtTime(0, t + dur);
+
+                osc.connect(gain).connect(audioCtx.destination);
+                osc.start(t);
+                osc.stop(t + dur + 0.02);
+            }
+        }
+
+        function vibrate(pattern) {
+            if (navigator.vibrate) navigator.vibrate(pattern);
+        }
+
+        function render() {
+            timeEl.textContent = timeLeft;
+            labelEl.textContent = LABELS[phase];
+            document.body.style.backgroundColor = COLORS[phase];
+        }
+
+        function loop() {
+            const now = Date.now();
+            let remaining = Math.ceil((endTime - now) / 1000);
+
+            if (remaining <= 0) {
+                // === СМЕНА ФАЗЫ ===
+                phase = 1 - phase;
+                endTime = now + PERIOD * 1000;
+                remaining = PERIOD;
+
+                // Звук + вибрация
+                beep(3, phase === 0 ? 660 : 880);   // красный ниже, зелёный выше
+                vibrate([200, 100, 200, 100, 200]);
+
+                render();
+            } else if (remaining !== timeLeft) {
+                timeLeft = remaining;
+                render();
+            }
+
+            rafId = requestAnimationFrame(loop);
+        }
+
+        function toggle() {
+            // Инициализируем аудио именно по клику (требование браузеров)
+            initAudio();
+
+            running = !running;
+            if (running) {
+                endTime = Date.now() + timeLeft * 1000;
+                btn.textContent = 'ПАУЗА';
+                loop();
+            } else {
+                cancelAnimationFrame(rafId);
+                btn.textContent = 'СТАРТ';
+            }
+        }
+
+        render();
+    </script>
+</body>
+
+</html>
+...
